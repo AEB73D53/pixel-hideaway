@@ -45,6 +45,18 @@ npm start
 
 ## 部署
 
+### GitHub Pages
+
+仓库提供自动部署工作流：
+
+1. 在仓库的 **Settings → Pages → Build and deployment** 中，将 **Source** 设为 **GitHub Actions**。
+2. 打开 **Actions → Deploy website to GitHub Pages**，点击 **Run workflow** 启动首次部署。
+3. 工作流通过后，在 **Settings → Pages** 中查看在线网址。
+
+之后提交到 `main` 分支的网站文件变更会自动触发测试和重新部署。
+
+### 其他静态托管
+
 将 `dist/` 目录作为静态网站发布即可，无需构建步骤或后端服务。部署后通过 HTTPS 访问；本地运行使用 localhost，不能直接双击 HTML 使用。
 
 ## 开发与测试
