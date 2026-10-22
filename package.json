@@ -1,0 +1,8 @@
+{
+  "name": "pixel-hideaway",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-local reversible image pixel scrambling",
+  "scripts": { "dev": "node server.mjs", "start": "node server.mjs", "test": "node --test tests/*.test.mjs" }
+}

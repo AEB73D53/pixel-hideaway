@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#5865df">
+  <meta name="description" content="上传图片，用口令混淆像素，再用相同口令无损还原。所有图片均在浏览器本地处理，无需上传服务器。">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; worker-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <title>像素迷藏 · 图片混淆与还原</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <svg class="icons" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6Z"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m-4 4 4-4 4 4M4 16v4h16v-4"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v3"/></symbol>
+    <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 7.5-2M12 14v3"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-dice" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 8h.01M16 8h.01M12 12h.01M8 16h.01M16 16h.01"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.01"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 10a8 8 0 0 0-14-5L3 8m0-5v5h5m-4 6a8 8 0 0 0 14 5l3-3m0 5v-5h-5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+  </defs></svg>
+
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="像素迷藏首页"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>像素迷藏<span class="brand-en">PIXEL HIDEAWAY</span></span></a>
+    <nav aria-label="主导航"><a class="nav-active" href="#workbench">图片工作台</a><a href="#how-it-works">使用指南</a><span class="local-badge"><span></span>本地处理，安心使用</span></nav>
+  </header>
+
+  <main>
+    <section class="intro" aria-labelledby="hero-title">
+      <div><p class="eyebrow"><span class="tiny-grid">▦</span> 一点像素，一点小秘密</p><h1 id="hero-title">让图片，<span>换一种样子。</span></h1><p class="intro-copy">打乱像素，藏起画面。一个口令，让一切回到原样。</p></div>
+      <div class="pixel-illustration" aria-hidden="true"><div class="mini-frame"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div><svg class="doodle-arrow" viewBox="0 0 90 45"><path d="M5 30C25-3 53 4 77 22m-3-14 5 16-17 1"/></svg><div class="mini-pixels"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div><span class="illustration-caption">same pixels. new possibilities.</span></div>
+    </section>
+
+    <section class="workbench" id="workbench" aria-label="图片混淆工作台">
+      <div class="workbench-top"><div class="mode-tabs" role="tablist" aria-label="处理模式"><button id="scramble-tab" class="mode-tab active" role="tab" aria-selected="true" aria-controls="controls"><svg><use href="#i-lock"/></svg>图片混淆</button><button id="restore-tab" class="mode-tab" role="tab" aria-selected="false" aria-controls="controls" tabindex="-1"><svg><use href="#i-unlock"/></svg>图片还原</button></div><span class="workbench-hint"><svg><use href="#i-lock"/></svg>图片不离开你的设备</span></div>
+      <div class="workbench-body">
+        <aside class="controls" id="controls" role="tabpanel" aria-labelledby="scramble-tab">
+          <div class="field-heading"><span class="step">1</span><h2 id="upload-title">选择一张图片</h2></div>
+          <input id="file-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+          <button class="dropzone" id="dropzone" type="button" aria-describedby="upload-help"><span class="upload-symbol"><svg><use href="#i-upload"/></svg></span><strong id="upload-label">点击上传，或拖拽到这里</strong><span id="upload-help">PNG、JPG、WebP · 最大 50 MB<br>最多 1200 万像素</span></button>
+          <div class="selected-file" id="selected-file" hidden><svg><use href="#i-image"/></svg><div><strong id="file-name"></strong><span id="file-details"></span></div><button id="clear-file" class="icon-button" aria-label="移除图片"><svg><use href="#i-close"/></svg></button></div>
+          <button class="sample-button" id="sample-button"><svg><use href="#i-spark"/></svg>没有图片？试试示例<span>↗</span></button>
+          <div class="field-heading key-heading"><span class="step">2</span><h2 id="key-title">设置混淆口令</h2></div>
+          <div class="password-field"><svg><use href="#i-lock"/></svg><input id="password" type="password" maxlength="256" autocomplete="new-password" placeholder="输入一个你记得住的口令" aria-labelledby="key-title" aria-describedby="password-help"><button class="icon-button" id="toggle-password" aria-label="显示口令" aria-pressed="false"><svg><use href="#i-eye"/></svg></button></div>
+          <div class="key-options"><span>建议使用 8 位以上的口令</span><button id="random-password"><svg><use href="#i-dice"/></svg>随机生成</button></div>
+          <p class="field-note" id="password-help">还原时需要相同口令，请自行妥善保存。</p>
+          <div class="output-format"><span>输出格式</span><strong>PNG <span>无损</span></strong></div>
+          <button class="primary-button" id="process-button"><svg><use href="#i-spark"/></svg><span>开始混淆</span><svg class="button-arrow"><use href="#i-arrow"/></svg></button>
+          <button class="cancel-button" id="cancel-button" hidden>取消处理</button>
+          <p class="control-footer"><svg><use href="#i-check"/></svg>无需注册 · 不上传服务器</p>
+        </aside>
+
+        <div class="preview-area">
+          <div class="preview-heading"><h2>画面预览<span id="preview-badge">效果示意</span></h2><button id="reset-button" class="text-button"><svg><use href="#i-refresh"/></svg>重置</button></div>
+          <div class="preview-grid">
+            <article class="preview-card"><div class="preview-card-title"><span class="card-dot original-dot"></span><h3 id="input-title">原始图片</h3><span id="input-tag">BEFORE</span></div><div class="canvas-stage" id="input-stage"><canvas id="input-canvas" width="720" height="540" aria-label="原始图片预览"></canvas><span class="demo-label" id="input-demo">示例图片</span></div><div class="preview-caption"><span id="input-caption">每一张图片，都有另一种可能</span><span id="input-size">—</span></div></article>
+            <div class="between-arrow" aria-hidden="true"><svg><use href="#i-arrow"/></svg></div>
+            <article class="preview-card"><div class="preview-card-title"><span class="card-dot result-dot"></span><h3 id="output-title">混淆结果</h3><span id="output-tag">AFTER</span></div><div class="canvas-stage result-stage" id="output-stage"><canvas id="output-canvas" width="720" height="540" aria-label="处理结果预览"></canvas><div class="result-placeholder" id="result-placeholder" hidden><svg><use href="#i-spark"/></svg><span>你的结果将在这里出现</span><small>准备好后，点击「开始混淆」</small></div><span class="demo-label" id="output-demo">混淆效果示意</span></div><div class="preview-caption"><span id="output-caption">像素换个位置，小秘密就藏好了</span><span id="output-size">—</span></div></article>
+          </div>
+          <div class="status-message" id="status" role="status" aria-live="polite"><svg><use href="#i-info"/></svg><span>上传图片开始，或试试左侧的示例图片。</span></div>
+          <div class="progress-wrap" id="progress-wrap" hidden><progress id="progress" max="100" value="0" aria-label="图片处理进度"></progress></div>
+          <div class="download-row"><div class="result-info"><svg><use href="#i-image"/></svg><div><strong id="result-info-title">给图片加一点神秘感</strong><span id="result-info-text">保留所有像素，随时用口令还原。</span></div></div><button class="download-button" id="download-button" disabled><svg><use href="#i-download"/></svg>下载图片</button></div>
+          <div class="gentle-note"><svg><use href="#i-info"/></svg><p id="preserve-note">请保留下载的原始 PNG 文件。截图、压缩、裁剪或转为 JPG 后，将无法保证还原。</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="features" aria-label="功能特点"><div><span class="feature-icon mint"><svg><use href="#i-lock"/></svg></span><div><h3>本地处理，更安心</h3><p>图片和口令只留在当前浏览器。</p></div></div><div><span class="feature-icon lavender"><svg><use href="#i-refresh"/></svg></span><div><h3>像素无损，可逆还原</h3><p>保留像素和透明度，还原后验证完整性。</p></div></div><div><span class="feature-icon peach"><svg><use href="#i-download"/></svg></span><div><h3>即用即走，不留记录</h3><p>无需登录，刷新页面即清空工作区。</p></div></div></section>
+
+    <section class="guide" id="how-it-works"><div class="guide-heading"><p class="eyebrow">HOW IT WORKS</p><h2>三步，藏起你的画面</h2><p>混淆和还原，都只需要一小会儿。</p></div><div class="guide-steps"><div><span>01</span><h3>上传图片</h3><p>选择一张 PNG、JPG 或 WebP 图片，也可以直接拖入。</p></div><div><span>02</span><h3>设置口令，开始混淆</h3><p>记好口令，下载包含还原参数的 PNG，保持原文件不变。</p></div><div><span>03</span><h3>随时还原</h3><p>切换到「图片还原」，上传混淆 PNG，输入相同口令即可。</p></div></div></section>
+    <section class="faq" aria-label="常见问题"><h2>你可能还想知道</h2><details><summary>混淆后真的能完整还原吗？</summary><p>使用本站生成的原始混淆 PNG 和正确口令，可以还原混淆前解码后的全部 RGBA 像素，包含透明度，并验证像素校验值。还原文件统一为 PNG；原文件的压缩方式、EXIF 等元数据不保留。</p></details><details><summary>能还原其他网站生成的混淆图吗？</summary><p>目前支持本站 PH1 算法生成、包含还原参数的 PNG。不同工具的算法不通用；截图、重新压缩、裁剪和删除参数都会影响还原。</p></details><details><summary>这可以用来加密敏感文件吗？</summary><p>这是视觉混淆工具，打乱像素但仍保留颜色分布，不是安全加密。请勿把它作为保护敏感信息的唯一手段。口令丢失后，本站无法替你找回。</p></details></section>
+  </main>
+  <footer><a class="footer-brand" href="./"><span class="tiny-grid">▦</span> 像素迷藏</a><span>一点小秘密，留在像素里。</span><span>在你的浏览器里，完成一切。</span></footer>
+  <noscript><div class="noscript">请启用 JavaScript，图片混淆与还原需要在浏览器中运行。</div></noscript>
+</body>
+</html>

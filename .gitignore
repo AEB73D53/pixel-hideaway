@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.*
+!.env.example
+*.tar.gz
+*.tar
+test-results/
+__pycache__/
+.sites-local/
