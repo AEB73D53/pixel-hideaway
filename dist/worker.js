@@ -1,13 +1,38 @@
 import { deriveKey, digest, transform, parsePNG, validateMetadata, decodeOwnPNG, encodePNG, MAX_PIXELS, MAX_BYTES } from './core.js';
+import { transformGilbert } from './gilbert.js';
 
-self.onmessage = async ({ data: { file, password, mode } }) => {
+self.onmessage = async ({ data: { file, password, mode, algorithm = 'ph1' } }) => {
   try {
     if (file.size > MAX_BYTES) throw new Error('图片超过 50 MB，请选择更小的图片。');
-    if (!password || password.length > 256) throw new Error('请填写 1–256 个字符的口令。');
+    if (!['gilbert', 'ph1'].includes(algorithm)) throw new Error('无法识别图片处理方式。');
+    if (algorithm === 'ph1' && (!password || password.length > 256)) throw new Error('请填写 1–256 个字符的口令。');
     const buffer = new Uint8Array(await file.arrayBuffer());
     const parsed = parsePNG(buffer, true);
     let width, height, pixels, metadata;
     self.postMessage({ progress: 15, message: '正在读取图片…' });
+    if (algorithm === 'gilbert') {
+      if (parsed?.metadata?.version === 'PH1') throw new Error('这是旧版 PH1 口令图，请切换到口令模式并输入原口令。');
+      if (parsed && parsed.header.width * parsed.header.height > MAX_PIXELS) throw new Error('图片超过 1200 万像素，请先缩小尺寸。');
+      const image = await createImageBitmap(file, { imageOrientation: 'from-image' });
+      ({ width, height } = image);
+      if (width * height > MAX_PIXELS) { image.close(); throw new Error('图片超过 1200 万像素，请先缩小尺寸。'); }
+      // Read our own RGBA PNG directly when possible to preserve alpha exactly.
+      if (parsed && parsed.header.colorType === 6 && parsed.header.bitDepth === 8 && !parsed.header.interlace) {
+        try { pixels = await decodeOwnPNG(parsed); } catch { /* Other PNG filters use the browser decoder below. */ }
+      }
+      if (!pixels) {
+        const canvas = new OffscreenCanvas(width, height), ctx = canvas.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(image, 0, 0);
+        pixels = new Uint8Array(ctx.getImageData(0, 0, width, height).data.buffer);
+      }
+      image.close();
+      self.postMessage({ progress: 35, message: mode === 'restore' ? '正在按分享模式还原…' : '正在生成免口令混淆图…' });
+      const output = transformGilbert(pixels, width, height, mode === 'restore');
+      self.postMessage({ progress: 75, message: '正在生成 PNG…' });
+      const png = await encodePNG(output, width, height);
+      self.postMessage({ done: true, blob: new Blob([png], { type: 'image/png' }), width, height, verified: false, algorithm });
+      return;
+    }
     if (mode === 'restore') {
       if (!parsed?.metadata) throw new Error('未找到还原参数。请上传本站生成的原始混淆 PNG，截图或其他工具生成的图片无法还原。');
       metadata = parsed.metadata;

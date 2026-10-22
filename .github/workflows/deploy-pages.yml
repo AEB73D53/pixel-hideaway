@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - 'dist/**'
-      - 'tests/core.test.mjs'
+      - 'tests/**'
       - 'package.json'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:

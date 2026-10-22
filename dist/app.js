@@ -1,11 +1,28 @@
 import { MAX_BYTES, MAX_PIXELS, parsePNG, validateMetadata, transform } from './core.js';
+import { transformGilbert } from './gilbert.js';
 
 const $ = id => document.getElementById(id);
 const ui = Object.fromEntries(['file-input','dropzone','upload-label','upload-help','selected-file','file-name','file-details','clear-file','sample-button','password','toggle-password','random-password','process-button','cancel-button','reset-button','download-button','scramble-tab','restore-tab','controls','key-title','input-title','output-title','input-tag','output-tag','input-canvas','output-canvas','input-demo','output-demo','input-caption','output-caption','input-size','output-size','preview-badge','result-placeholder','status','progress-wrap','progress','result-info-title','result-info-text'].map(id => [id, $(id)]));
 let mode = 'scramble', file = null, result = null, worker = null, busy = false, loading = false, loadVersion = 0;
 let downloadURL = null;
+let algorithm = 'gilbert';
+const algorithmSelect = $('algorithm');
 const supported = !!(globalThis.crypto?.subtle && globalThis.Worker && globalThis.OffscreenCanvas && globalThis.CompressionStream && globalThis.DecompressionStream && globalThis.createImageBitmap);
 const bytesLabel = n => n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
+
+function updateAlgorithmUI() {
+  const shared = algorithm === 'gilbert';
+  algorithmSelect.value = algorithm;
+  for (const id of ['password-heading', 'password-field', 'key-options', 'password-help']) $(id).hidden = shared;
+  $('algorithm-help').textContent = shared ? '固定 Gilbert 算法，无需口令。可与相同算法的混淆图互通。' : 'PH1 口令模式仅适用于本站口令图，还原时需要原口令。';
+  ui['upload-help'].innerHTML = !shared && mode === 'restore' ? '仅支持 PH1 原始 PNG<br>最大 50 MB · 最多 1200 万像素' : 'PNG、JPG、WebP · 最大 50 MB<br>最多 1200 万像素';
+  ui['file-input'].accept = !shared && mode === 'restore' ? 'image/png' : 'image/png,image/jpeg,image/webp';
+  $('preserve-note').textContent = shared ? '仅支持相同 Gilbert 算法。请勿缩放、裁剪或旋转图片；JPEG 压缩后只能近似恢复。' : '请保留原始 PH1 PNG 和口令。截图、压缩、裁剪或重新编码后可能无法还原。';
+}
+function readyMessage() {
+  if (algorithm === 'gilbert') return mode === 'restore' ? '分享模式无需口令。请上传相同 Gilbert 算法的混淆图，点击「开始还原」。' : '图片已准备好。分享模式无需口令，点击「开始混淆」即可。';
+  return mode === 'restore' ? '已识别 PH1 还原参数。输入原口令，点击「开始还原」。' : '图片已准备好。设置口令后，点击「开始混淆」。';
+}
 
 function status(message, kind = '') {
   ui.status.className = 'status-message' + (kind ? ' ' + kind : '');
@@ -17,7 +34,7 @@ function invalidateResult() {
   if (downloadURL) { URL.revokeObjectURL(downloadURL); downloadURL = null; }
   ui['download-button'].disabled = true;
   ui['result-info-title'].textContent = mode === 'scramble' ? '给图片加一点神秘感' : '让画面回到原样';
-  ui['result-info-text'].textContent = mode === 'scramble' ? '保留所有像素，随时用口令还原。' : '上传原始混淆 PNG，输入相同口令。';
+  ui['result-info-text'].textContent = algorithm === 'gilbert' ? '无需交换口令，一起分享混淆图。' : mode === 'scramble' ? '保留所有像素，随时用口令还原。' : '上传原始混淆 PNG，输入相同口令。';
   ui['output-canvas'].getContext('2d').clearRect(0, 0, ui['output-canvas'].width, ui['output-canvas'].height);
   ui['result-placeholder'].hidden = false;
   ui['result-placeholder'].querySelector('small').textContent = mode === 'scramble' ? '准备好后，点击「开始混淆」' : '准备好后，点击「开始还原」';
@@ -26,6 +43,7 @@ function invalidateResult() {
 }
 function setBusy(value) {
   busy = value;
+  algorithmSelect.disabled = value || !supported;
   for (const id of ['dropzone','clear-file','sample-button','password','random-password','scramble-tab','restore-tab','reset-button']) ui[id].disabled = value;
   ui['process-button'].disabled = value || loading || !supported;
   ui['cancel-button'].hidden = !value;
@@ -75,7 +93,7 @@ function drawSample(canvas) {
 function demoPreview() {
   drawSample(ui['input-canvas']);
   const c = ui['input-canvas'], pixels = c.getContext('2d').getImageData(0,0,c.width,c.height);
-  const shuffled = transform(pixels.data,c.width,c.height,'0123456789abcdef0123456789abcdef');
+  const shuffled = algorithm === 'gilbert' ? transformGilbert(pixels.data,c.width,c.height) : transform(pixels.data,c.width,c.height,'0123456789abcdef0123456789abcdef');
   ui['output-canvas'].width=c.width;ui['output-canvas'].height=c.height;
   ui['output-canvas'].getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(shuffled.buffer),c.width,c.height),0,0);
   ui['result-placeholder'].hidden=true;
@@ -96,8 +114,11 @@ async function loadFile(candidate) {
     const jpeg = bytes[0] === 255 && bytes[1] === 216;
     const webp = new TextDecoder().decode(bytes.subarray(0,4)) === 'RIFF' && new TextDecoder().decode(bytes.subarray(8,12)) === 'WEBP';
     if (!png && !jpeg && !webp) throw new Error('请选择有效的 PNG、JPG 或 WebP 图片。');
-    if (mode === 'restore' && !png?.metadata) throw new Error('请上传本站生成的原始混淆 PNG，当前图片没有还原参数。');
-    if (png?.metadata) validateMetadata(png.metadata, png.header);
+    if (png?.metadata) {
+      validateMetadata(png.metadata, png.header);
+      algorithm = 'ph1'; updateAlgorithmUI();
+    }
+    if (algorithm === 'ph1' && mode === 'restore' && !png?.metadata) throw new Error('当前图片没有 PH1 还原参数。普通分享图请切换为分享模式。');
     if (png && png.header.width * png.header.height > MAX_PIXELS) throw new Error('图片超过 1200 万像素，请先缩小尺寸。');
     const bitmap = await createImageBitmap(candidate);
     const { width, height } = bitmap;
@@ -115,7 +136,7 @@ async function loadFile(candidate) {
     ui['preview-badge'].textContent='已载入图片';
     ui['upload-label'].textContent='点击或拖拽，更换图片';
     if (mode === 'scramble' && png?.metadata) status('这是一张已经混淆的图片。需要还原时，请切换到「图片还原」。');
-    else status(mode==='scramble'?'图片已准备好。设置口令后，点击「开始混淆」。':'已识别 PH1 还原参数。输入原口令，点击「开始还原」。');
+    else status(readyMessage());
   } catch(error) {
     if(version===loadVersion) status(/图片|文件|PNG|参数/.test(error.message)?error.message:'无法读取图片，请检查文件是否完整，或更换一张图片。','error');
   } finally {
@@ -135,24 +156,23 @@ function setMode(next) {
   ui.password.placeholder=mode==='scramble'?'输入一个你记得住的口令':'输入生成混淆图时的口令';
   ui.password.autocomplete=mode==='scramble'?'new-password':'current-password';
   ui['sample-button'].hidden=mode==='restore';ui['random-password'].hidden=mode==='restore';
-  ui['upload-help'].innerHTML=mode==='restore'?'仅支持本站生成的原始 PNG<br>最大 50 MB · 最多 1200 万像素':'PNG、JPG、WebP · 最大 50 MB<br>最多 1200 万像素';
+  updateAlgorithmUI();
   ui['input-title'].textContent=mode==='scramble'?'原始图片':'混淆图片';
   ui['output-title'].textContent=mode==='scramble'?'混淆结果':'还原结果';
   ui['process-button'].querySelector('span').textContent=mode==='scramble'?'开始混淆':'开始还原';
-  ui['file-input'].accept=mode==='restore'?'image/png':'image/png,image/jpeg,image/webp';
   invalidateResult();
   // Switching directly after a successful operation reuses its PNG.
   if(previousResult){loadFile(new File([previousResult.blob],previousResult.name,{type:'image/png'}));}
   else {
-    status(mode==='restore'?'上传本站生成的原始混淆 PNG，并输入相同口令。':'上传图片开始，或试试左侧的示例图片。');
+    status(mode==='restore'?readyMessage():'上传图片开始，或试试左侧的示例图片。');
     if(!file){ui['input-canvas'].getContext('2d').clearRect(0,0,ui['input-canvas'].width,ui['input-canvas'].height);ui['input-demo'].hidden=true;ui['input-caption'].textContent='等待上传';ui['preview-badge'].textContent='等待上传';if(mode==='scramble')demoPreview();}
   }
 }
 async function processImage() {
   if(busy || loading || !supported) return;
   if(!file){status('请先上传一张图片，或点击「试试示例」。','error');ui.dropzone.focus();return;}
-  if(!ui.password.value){status('请先填写口令，还原图片时也需要它。','error');ui.password.focus();return;}
-  const password=ui.password.value, source=file, activeMode=mode;
+  if(algorithm==='ph1'&&!ui.password.value){status('请先填写口令，还原图片时也需要它。','error');ui.password.focus();return;}
+  const password=ui.password.value, source=file, activeMode=mode, activeAlgorithm=algorithm;
   invalidateResult();setBusy(true);ui.progress.value=0;status('正在准备处理…');
   const currentWorker = new Worker(new URL('./worker.js',import.meta.url),{type:'module'});worker=currentWorker;
   currentWorker.onmessage=async({data})=>{
@@ -165,22 +185,23 @@ async function processImage() {
         const name=`${clean}-${activeMode==='scramble'?'scrambled':'restored'}.png`;
         await displayBlob(data.blob,ui['output-canvas'],()=>worker===currentWorker);
         if(worker!==currentWorker)return;
-        result={blob:data.blob,name,mode:activeMode};
+        result={blob:data.blob,name,mode:activeMode,algorithm:activeAlgorithm};
         downloadURL=URL.createObjectURL(data.blob);
         ui['result-placeholder'].hidden=true;ui['output-demo'].hidden=true;
-        ui['output-caption'].textContent=activeMode==='scramble'?'像素已打乱 · PNG 无损保存':'完整性验证通过 · RGBA 像素已还原';
+        ui['output-caption'].textContent=activeMode==='scramble'?'像素已打乱 · PNG 无损保存':data.verified?'完整性验证通过 · RGBA 像素已还原':'已按分享算法逆向处理 · 请确认画面';
         ui['output-size'].textContent=`${data.width} × ${data.height}`;
         ui['preview-badge'].textContent=activeMode==='scramble'?'混淆完成':'还原完成';
         ui['result-info-title'].textContent=activeMode==='scramble'?'混淆完成，小秘密藏好了':'还原完成，画面回来了';
-        ui['result-info-text'].textContent=`PNG · ${bytesLabel(data.blob.size)} · ${activeMode==='scramble'?'包含还原参数':'像素完整性校验通过'}`;
+        ui['result-info-text'].textContent=`PNG · ${bytesLabel(data.blob.size)} · ${activeAlgorithm==='gilbert'?'Gilbert 分享模式':activeMode==='scramble'?'包含还原参数':'像素完整性校验通过'}`;
         ui['download-button'].disabled=false;
-        status(activeMode==='scramble'?'混淆成功！下载原始 PNG 并保管好口令；切换「图片还原」可立即验证。':'还原成功！像素完整性校验通过，可以下载还原图片。','success');
+        if (activeAlgorithm === 'gilbert') status(activeMode==='scramble'?'混淆成功！无需口令，下载原始 PNG 即可分享。':'还原处理完成！请查看画面是否正确；不同算法不通用，JPEG 图片只能近似恢复。',activeMode==='scramble'?'success':'');
+        else status(activeMode==='scramble'?'混淆成功！下载原始 PNG 并保管好口令；切换「图片还原」可立即验证。':'还原成功！像素完整性校验通过，可以下载还原图片。','success');
       }catch{status('图片已处理，但无法显示结果。请尝试较小的图片。','error');}
       finally{if(worker===currentWorker)stopWorker();}
     }
   };
   currentWorker.onerror=()=>{if(worker===currentWorker){stopWorker();status('处理线程意外停止，可能是内存不足。请缩小图片后重试。','error');}};
-  currentWorker.postMessage({file:source,password,mode:activeMode});
+  currentWorker.postMessage({file:source,password,mode:activeMode,algorithm:activeAlgorithm});
 }
 function reset() {
   ++loadVersion;loading=false;stopWorker();file=null;invalidateResult();
@@ -189,8 +210,17 @@ function reset() {
   ui['input-caption'].textContent='等待上传';ui['input-size'].textContent='—';ui['preview-badge'].textContent='等待上传';
   ui['input-canvas'].getContext('2d').clearRect(0,0,ui['input-canvas'].width,ui['input-canvas'].height);ui['input-demo'].hidden=true;
   if(mode==='scramble')demoPreview();
-  status(mode==='scramble'?'上传图片开始，或试试左侧的示例图片。':'上传本站生成的原始混淆 PNG，并输入相同口令。');
+  status(mode==='scramble'?'上传图片开始，或试试左侧的示例图片。':readyMessage());
 }
+algorithmSelect.addEventListener('change',()=>{
+  if (busy) return;
+  algorithm=algorithmSelect.value;
+  ++loadVersion; loading=false;
+  ui['process-button'].disabled=!supported;
+  updateAlgorithmUI(); invalidateResult();
+  if (file) loadFile(file);
+  else { if(mode==='scramble')demoPreview(); status(mode==='restore'?readyMessage():'上传图片开始，或试试示例图片。'); }
+});
 ui.dropzone.addEventListener('click',()=>ui['file-input'].click());
 ui['file-input'].addEventListener('change',e=>loadFile(e.target.files[0]));
 for(const event of ['dragenter','dragover'])ui.dropzone.addEventListener(event,e=>{e.preventDefault();if(!busy)ui.dropzone.classList.add('dragover');});
@@ -210,5 +240,5 @@ ui['process-button'].addEventListener('click',processImage);
 ui['cancel-button'].addEventListener('click',()=>{stopWorker();status('已取消处理。可以调整图片或口令后重试。');});
 ui['download-button'].addEventListener('click',()=>{if(!result||!downloadURL)return;const a=document.createElement('a');a.href=downloadURL;a.download=result.name;document.body.append(a);a.click();a.remove();});
 window.addEventListener('pagehide',()=>{worker?.terminate();if(downloadURL)URL.revokeObjectURL(downloadURL);});
-demoPreview();
+updateAlgorithmUI(); demoPreview();
 if(!supported){status('当前浏览器缺少本地处理能力。请使用新版 Chrome、Edge、Firefox 或 Safari，并通过 HTTPS 或 localhost 打开。','error');for(const id of ['process-button','dropzone','sample-button','random-password'])ui[id].disabled=true;}

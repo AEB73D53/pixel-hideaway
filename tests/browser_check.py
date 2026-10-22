@@ -23,6 +23,28 @@ with sync_playwright() as p:
     assert '先上传' in page.locator('#status').inner_text()
     checks.append('initial state and missing-file validation')
 
+    assert page.locator('#algorithm').input_value() == 'gilbert'
+    assert not page.locator('#password').is_visible()
+    page.locator('#sample-button').click()
+    page.wait_for_function("() => !document.querySelector('#selected-file').hidden")
+    page.locator('#process-button').click()
+    page.wait_for_function("() => document.querySelector('#status').textContent.includes('混淆成功')")
+    with page.expect_download() as download:
+        page.locator('#download-button').click()
+    shared = OUT / 'shared.png'
+    download.value.save_as(shared)
+    page.locator('#restore-tab').click()
+    page.wait_for_function("() => !document.querySelector('#process-button').disabled")
+    page.locator('#process-button').click()
+    page.wait_for_function("() => document.querySelector('#status').textContent.includes('还原处理完成')")
+    assert '完整性验证通过' not in page.locator('#output-caption').inner_text()
+    assert not page.locator('#download-button').is_disabled()
+    checks.append('default password-free sharing and restoration without false checksum claims')
+
+    page.locator('#scramble-tab').click()
+    page.locator('#reset-button').click()
+    page.locator('#algorithm').select_option('ph1')
+
     page.locator('#sample-button').click()
     page.wait_for_function("() => document.querySelector('#selected-file').hidden === false")
     page.locator('#password').fill('')
@@ -90,15 +112,22 @@ with sync_playwright() as p:
     page.locator('#reset-button').click()
     assert page.locator('#download-button').is_disabled()
     page.locator('#file-input').set_input_files(str(transparent))
-    page.wait_for_function("() => document.querySelector('#status').textContent.includes('没有还原参数')")
+    page.wait_for_function("() => document.querySelector('#status').textContent.includes('没有 PH1 还原参数')")
     bad = OUT / 'invalid.png'
     bad.write_text('not an image', encoding='utf-8')
     page.locator('#file-input').set_input_files(str(bad))
     page.wait_for_function("() => document.querySelector('#status').textContent.includes('有效的')")
     checks.append('reset, incompatible restore image and invalid upload rejection')
 
+    page.locator('#algorithm').select_option('gilbert')
+    page.locator('#file-input').set_input_files(str(scrambled))
+    page.wait_for_function("() => document.querySelector('#algorithm').value === 'ph1' && !document.querySelector('#process-button').disabled")
+    assert page.locator('#password').is_visible()
+    checks.append('old PH1 PNG automatically selects password mode')
+
     page.locator('#scramble-tab').click()
     page.locator('#reset-button').click()
+    page.locator('#algorithm').select_option('gilbert')
     for width in [375, 768, 1024]:
         page.set_viewport_size({'width': width, 'height': 900})
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), f'overflow at {width}'
